@@ -1,0 +1,33 @@
+version: '3.1'
+
+services:
+
+  splash:
+    # TODO: Need to create more instances to increase productivity
+    image: scrapinghub/splash:3.1
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 4 --disable-private-mode
+    restart: always
+    ports:
+      - 8050:8050
+
+  searx:
+    image: searxng/searxng
+    restart: always
+    ports:
+      - 8080:8080
+    volumes:
+      - ./searxng:/etc/searxng
+    environment:
+      INSTANCE_NAME: mobile_parts_companies
+
+  app:
+    image: ferhadferrytelecom/mobile_parts_companies
+    restart: always
+    volumes:
+      - ./:/usr/src/app
+
+#  restarter:
+#    image: docker
+#    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+#    command: ["/bin/sh", "-c", "while true; do sleep 20; docker compose restart splash; done"]
+#    restart: unless-stopped

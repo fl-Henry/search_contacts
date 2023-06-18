@@ -1,0 +1,10 @@
+#! /bin/bash
+
+docker compose up &
+
+# TODO find out the way to check if splash is frozen
+while true; do
+  sleep 180;
+  docker compose restart splash;
+done
+
