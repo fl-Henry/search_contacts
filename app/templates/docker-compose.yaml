@@ -1,0 +1,28 @@
+version: '3.1'
+
+services:
+
+  {%- for instance_index in range(instances_number) %}
+  splash_{{ instance_index }}:
+    image: scrapinghub/splash
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode
+    restart: always
+    ports:
+      - 805{{ instance_index }}:8050
+  {% endfor -%}
+
+  searx:
+    image: searxng/searxng
+    restart: always
+    ports:
+      - 8080:8080
+    volumes:
+      - ./searxng:/etc/searxng
+    environment:
+      INSTANCE_NAME: mobile_parts_companies
+
+  app:
+    image: ferhadferrytelecom/mobile_parts_companies
+    restart: always
+    volumes:
+      - ./:/usr/src/app

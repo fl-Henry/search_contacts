@@ -62,6 +62,9 @@ class PrintMode(metaclass=PrintModeSingletonMeta):
         self.timestamp = timestamp_key
 
     def print(self, mode, *message, color=None):
+
+        # TODO: verbose levels
+
         message = " ".join([str(x) for x in message])
         stdout = ""
         if mode in self.mode:

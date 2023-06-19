@@ -4,8 +4,10 @@ import json
 import random
 import requests
 
+from urllib.request import urlopen
 from fake_headers import Headers
 from bs4 import BeautifulSoup
+from lxml import etree
 
 
 def get_headers():
@@ -21,4 +23,21 @@ def get_response_text(url):
 
 
 def get_soup(text):
-    return BeautifulSoup(text, "lxml")
+    return BeautifulSoup(str(text), "lxml")
+
+
+def find_xpath(soup, xpath_selector):
+    dom = etree.HTML(str(soup))
+    selected_items = dom.xpath(xpath_selector)
+    if len(selected_items) > 0:
+        return [get_soup(etree.tostring(x)) for x in selected_items]
+    else:
+        return []
+
+
+def find_one_xpath(soup, xpath_selector):
+    selected_items_soup = find_xpath(soup, xpath_selector)
+    if len(selected_items_soup) > 0:
+        return selected_items_soup[0]
+    else:
+        return []

@@ -1,0 +1,48 @@
+#!/bin/bash
+# run_sandbox
+
+# Exit with waiting for type <enter> before exit
+err_exit(){
+  echo '[ERROR]'
+  printf "%s " "Press enter to continue"
+  read -r
+  exit "$1"
+}
+
+# Get the option
+update_switch=''
+while [ "$#" -gt 0 ]
+do
+   case "$1" in
+
+     --update)
+      update_switch="--update"
+      ;;
+
+     -h|--help)
+      help="--help"
+      str_param+="$help "
+      printf "%s " " $help';"
+      ;;
+
+   -*)
+      echo "Invalid option '$1'. Use -h or --help to see the valid options" >&2
+      err_exit 1
+      ;;
+
+   *)
+      echo "Invalid option '$1'. Use -h or --help to see the valid options" >&2
+      err_exit 1
+   ;;
+   esac
+   shift
+done
+echo
+
+# Start app // entrypoint
+printf "\n\033[93m%s\033[0m\n" "< Start app"
+cd ./src || err_exit $?
+python ./sandbox.py $update_switch
+cd .. || err_exit $?
+printf "\n\033[93m%s\033[0m\n" "< Close app"
+

@@ -1,4 +1,5 @@
 # searx_hdr.py
+import time
 import json
 import requests
 

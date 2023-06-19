@@ -52,6 +52,9 @@ class DirectoriesHandler(metaclass=DirectoriesHandlerSingletonMeta):
         self.db_data = f"{self.base_dir}db_data/"
         self.temp = f"{self.base_dir}temp/"
         self.for_tests = f"{self.base_dir}for_tests/"
+        self.templates = f"{self.base_dir}templates/"
+
+        self.docker_compose_file = f"{self.base_dir}docker-compose.yaml"
 
         self.dirs = {
             # "base_dir": ,

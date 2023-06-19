@@ -359,10 +359,10 @@ engines:
     shortcut: bc
     categories: music
 
-  - name: wikipedia
-    engine: wikipedia
-    shortcut: wp
-    base_url: 'https://{language}.wikipedia.org/'
+#  - name: wikipedia
+#    engine: wikipedia
+#    shortcut: wp
+#    base_url: 'https://{language}.wikipedia.org/'
 
   - name: bing
     engine: bing
@@ -1811,7 +1811,7 @@ engines:
       month: 'pm'
       year: 'py'
     categories: [general, web]
-    disabled: true
+    disabled: false
     headers:
       Accept-Encoding: gzip, deflate
     about:

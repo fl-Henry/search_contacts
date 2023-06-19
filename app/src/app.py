@@ -1,4 +1,5 @@
 # app.py
+import os
 import sys
 import time
 
@@ -15,38 +16,26 @@ from searx_hdr import SearXhdr
 from splash_hdr import SplashHdr
 
 
-# Load config data
-config = dotenv_values(".env")
-
 # # ===== Global Variables ===================================================================== Global Variables =====
 ...
 # # ===== Global Variables ===================================================================== Global Variables =====
+...
+# Load config data
+dot_env_filename = ".env"
+if os.path.exists(f"{dot_env_filename}"):
+    config = dotenv_values(f"{dot_env_filename}")
+elif os.path.exists(f"./src/{dot_env_filename}"):
+    config = dotenv_values(f"./src/{dot_env_filename}")
+elif os.path.exists(f"./app/src/{dot_env_filename}"):
+    config = dotenv_values(f"./app/src/{dot_env_filename}")
+else:
+    raise ImportError
 
 # PrintMode instance
 pm = gm.PrintMode(
-    [
-        "DEBUG",
-        "WARNING",
-        "ERROR",
-        "INFO",
-    ],
-    timestamp_key=False
+    [x for x in ['DEBUG', 'WARNING', 'ERROR', 'INFO'] if config[x] == "YES"],
+    timestamp_key=(config['TIMESTAMP_KEY'] == "TRUE")
 )
-
-# SearX config
-SEARX_BASE_URL = config['SEARX_BASE_URL']
-searx = SearXhdr(searx_base_url=SEARX_BASE_URL)
-
-
-# Splash config
-SPLASH_BASE_URL = config['SPLASH_BASE_URL']
-SPLASH_PARAMS = {
-    "wait": config['SPLASH_PARAMS_WAIT'],
-    "timeout": config['SPLASH_PARAMS_TIMEOUT'],
-    "resource_timeout": config['REQUEST_TIMEOUT'],
-    "images": config['IMAGES'],
-}
-splash = SplashHdr(SPLASH_BASE_URL, SPLASH_PARAMS)
 
 # DirectoriesHandler
 dh = fgm.DirectoriesHandler()
@@ -63,8 +52,27 @@ dh.dirs_to_remove.update(
     }
 )
 
+# SearX config
+SEARX_BASE_URL = config['SEARX_BASE_URL']
+searx = SearXhdr(searx_base_url=SEARX_BASE_URL)
+
+
+# Splash config
+SPLASH_BASE_URL = config['SPLASH_BASE_URL']
+SPLASH_PARAMS = {
+    "wait": config['SPLASH_PARAMS_WAIT'],
+    "timeout": config['SPLASH_PARAMS_TIMEOUT'],
+    "resource_timeout": config['REQUEST_TIMEOUT'],
+    "images": config['IMAGES'],
+}
+SPLASH_INSTANCES = fgm.json_read(f"{dh.temp}splash_containers_data.json")
+splash_list = [
+    SplashHdr(f"http://{splash_instance['ip']}:8050/render.html", SPLASH_PARAMS)
+    for splash_instance in SPLASH_INSTANCES
+]
+
 # Threads
-MAX_WORKERS = int(config["MAX_WORKERS"])
+MAX_WORKERS = int(config["INSTANCES_NUMBER"])
 
 
 # # ===== App logic =================================================================================== App logic =====
@@ -82,25 +90,138 @@ def select_one_of_list(soup, css_selector_list):
             continue
 
 
+def drop_blacklist_domains(url_list):
+    # NOT inurl:(alibaba OR aliexpress OR amazon OR ebay)
+    blocklist_domains = [
+        "https://www.esources.co.uk",
+        "https://esources.co.uk",
+        "https://www.globalsources.com",
+        "https://globalsources.com",
+        "https://www.go4worldbusiness.com",
+        "https://go4worldbusiness.com",
+        "https://b2b.hurtel.com",
+        "https://mpdmobileparts.com",
+        "https://www.lusha.com",
+        "https://lusha.com",
+        "https://www.glassdoor.com",
+        "https://glassdoor.com",
+        "https://www.tvh.com",
+        "https://tvh.com",
+        "https://www.yelp.com",
+        "https://yelp.com",
+        "https://www.ankorstore.com",
+        "https://ankorstore.com",
+
+        "ebay.com",
+        "ebay.co",
+        "alibaba.com",
+        "aliexpress.com",
+        "amazon.com",
+        "amazon.co",
+        ".apple.com",
+        "/apple.com",
+        "microsoft.com",
+        "quora.com",
+        "europages.co.uk",
+        "china.cn",
+        "made-in-china.com",
+        "linkedin.com",
+        "facebook.com",
+        "twitter.com",
+        "tradeholding.com",
+        ".etsy.com",
+        "/etsy.com",
+        "/wikipedia.org",
+        ".wikipedia.org",
+    ]
+    result_url_list = []
+    for url in url_list:
+        base_url = gm.url_to_base_url(url)
+        check_list = [x for x in blocklist_domains if x in base_url]
+        if len(check_list) > 0:
+            continue
+        else:
+            result_url_list.append(url)
+
+    return result_url_list
+
+
 def get_search_url_list(from_file=False):
+
     if from_file:
         result_files = dh.get_file_names(DB_DATA_DIR)
-        last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'results.json' in x])}"
-        url_list = fgm.json_read(last_file_path)
+        try:
+            last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'clean_url_list.json' in x])}"
+            url_list = fgm.json_read(last_file_path)
+
+        # If file doesn't exist
+        except Exception as _ex:
+            pm.error(f"Couldn't read from a file")
+            return get_search_url_list()
+
     else:
-        response_data = searx.search_many_pages("europe buy mobile parts", end_page=10, search_settings="")
-        url_list = response_data.get_urls()
-        fgm.json_rewrite(f"{DB_DATA_DIR}{gm.get_timestamp()}_results.json", url_list)
+        countries = [
+            "Austria",
+            "Belgium",
+            "Bulgaria",
+            "Switzerland",
+            "Cyprus",
+            "Czech Republic",
+            "Germany",
+            "Denmark",
+            "Estonia",
+            "Greece",
+            "Spain",
+            "Finland",
+            "France",
+            "Croatia",
+            "Hungary",
+            "Ireland",
+            "Iceland",
+            "Italy",
+            "Liechtenstein",
+            "Lithuania",
+            "Luxembourg",
+            "Latvia",
+            "Malta",
+            "Netherlands",
+            "Norway",
+            "Poland",
+            "Portugal",
+            "Romania",
+            "Sweden",
+            "Slovenia",
+            "Slovakia",
+            "United Kingdom",
+        ]
+        clean_url_list = []
+        url_list = []
+        results_json = []
+
+        for country in countries:
+            response_data = searx.search_many_pages(
+                f'"{country}" phone parts company intitle:"wholesale" -dnb.com',
+                end_page=3,
+                search_settings="!go"
+            )
+
+            results_json.append(response_data.json())
+            url_list.extend(response_data.get_urls())
+            clean_url_list.extend(drop_blacklist_domains(response_data.get_urls()))
+
+        fgm.json_rewrite(f"{DB_DATA_DIR}results_json.json", results_json)
+        fgm.json_rewrite(f"{DB_DATA_DIR}url_list.json", url_list)
+        fgm.json_rewrite(f"{DB_DATA_DIR}clean_url_list.json", clean_url_list)
 
     return url_list
 
 
-def find_contacts_page(url):
+def find_contacts_page(url, splash: SplashHdr):
     base_url = gm.url_to_base_url(url)
     pm.info(f"Find contacts for: {url}")
     response_text = splash.get_response_text(url)
     page_soup = BeautifulSoup(response_text, "lxml")
-    fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/','_').replace(':', '')}_results.html", str(page_soup))
+    fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/','_').replace(':', '')}_main_page.html", str(page_soup))
 
     key_word_list = [
         "Contact Us",
@@ -137,13 +258,13 @@ def get_contacts_dict(url_list, from_file=False):
     # If from_file == True
     if from_file:
         result_files = dh.get_file_names(DB_DATA_DIR)
-        last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'contacts_dict.json' in x])}"
         try:
+            last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'contacts_dict.json' in x])}"
             return fgm.json_read(last_file_path)
 
         # If file doesn't exist
         except Exception as _ex:
-            pm.error(f"Couldn't read file: {last_file_path}")
+            pm.error(f"Couldn't read from a file")
             return get_contacts_dict(url_list)
 
     # If from_file == False
@@ -151,50 +272,62 @@ def get_contacts_dict(url_list, from_file=False):
     url_iterator = gm.UrlIterator(url_list, MAX_WORKERS)
     for url_list in url_iterator:
 
-        # Concurrent retries == 2
-        for _concurrent_try_counter in range(2):
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                futures = {executor.submit(find_contacts_page, url): url for url in url_list}
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(find_contacts_page, url, splash): url
+                for url, splash in zip(url_list, splash_list)
+            }
 
-                # Process the results
-                for future in as_completed(futures):
-                    url = futures[future]
+            # Process the results
+            for future in as_completed(futures):
+                url = futures[future]
 
-                    # Try to get data concurrently
-                    try:
-                        res = future.result()
-                        if res is not None:
-                            contacts_dict.update(res)
+                # Try to get data concurrently
+                try:
+                    res = future.result()
+                    if res is not None:
+                        contacts_dict.update(res)
 
-                    # If there is any issue try to get data sequentially
-                    except Exception as _ex:
-                        pm.error(f"Error while executing '{url}': {_ex}")
-                        time.sleep(20)
-                        executor.shutdown()
-                        for url in url_list:
-
-                            # Sequentially retries == 3
-                            for _sequentially_try_counter in range(3):
-                                try:
-                                    contacts_dict.update(find_contacts_page(url))
-                                    break
-                                except Exception as _ex:
-                                    # Sleep and retry
-                                    pm.warning(f"Something went wrong: '{url}': {_ex}")
-                                    time.sleep(20)
-
-                                # If all the reties are failed, add None as result to the result dict
-                                contacts_dict.update({gm.url_to_base_url(url): None})
-                                pm.error(f"Couldn't get a contacts url for: {url}")
-                        break
-            break
+                # If there is any issue try to get data sequentially
+                except Exception as _ex:
+                    pm.error(f"Error while executing '{url}': {_ex}")
+                    contacts_dict.update({gm.url_to_base_url(url): None})
+                    pm.error(f"Couldn't get a contacts url for: {url}")
+                    time.sleep(10)
 
     fgm.json_rewrite(f"{DB_DATA_DIR}contacts_dict.json", contacts_dict)
     return contacts_dict
 
 
 def find_contacts_data(contacts_url):
-    pass
+    url = [*contacts_url.values()][0]
+    base_url = [*contacts_url.keys()][0]
+    pm.info(f"Find contacts data for: {url}")
+    response_text = splash.get_response_text(url)
+    page_soup = BeautifulSoup(response_text, "lxml")
+    fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/', '_').replace(':', '')}_contacts.html", str(page_soup))
+
+    css_selector_list = [
+        'div[class*="contact"]',
+        'div[class*="contact"]',
+    ]
+
+    contacts_tag = None
+    for x in page_soup.select("a"):
+        for key_word in key_word_list:
+            if key_word.lower() in x.text.lower():
+                contacts_tag = x
+                break
+
+        if contacts_tag is not None:
+            break
+
+    if contacts_tag is not None:
+        pm.debug(f"contacts_tag: {contacts_tag}")
+        return {base_url: gm.repair_url(contacts_tag['href'], base_url)}
+    else:
+        pm.warning(f"contacts_tag is None: {base_url}")
+        return {base_url: None}
 
 
 def get_contacts_data(contacts_dict):
@@ -257,7 +390,7 @@ def get_contacts_data(contacts_dict):
                         break
             break
 
-    fgm.json_rewrite(f"{DB_DATA_DIR}contacts_dict.json", contacts_dict)
+    fgm.json_rewrite(f"{DB_DATA_DIR}contacts_data.json", contacts_dict)
     return contacts_dict
 
 
