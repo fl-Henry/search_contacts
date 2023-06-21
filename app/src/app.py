@@ -1,4 +1,5 @@
 # app.py
+import json
 import os
 import sys
 import time
@@ -221,7 +222,7 @@ def find_contacts_page(url, splash: SplashHdr):
     pm.info(f"Find contacts for: {url}")
     response_text = splash.get_response_text(url)
     page_soup = BeautifulSoup(response_text, "lxml")
-    fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/','_').replace(':', '')}_main_page.html", str(page_soup))
+    # fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/','_').replace(':', '')}_main_page.html", str(page_soup))
 
     key_word_list = [
         "Contact Us",
@@ -257,9 +258,8 @@ def get_contacts_dict(url_list, from_file=False):
 
     # If from_file == True
     if from_file:
-        result_files = dh.get_file_names(DB_DATA_DIR)
         try:
-            last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'contacts_dict.json' in x])}"
+            last_file_path = f"{DB_DATA_DIR}contacts_dict.json"
             return fgm.json_read(last_file_path)
 
         # If file doesn't exist
@@ -292,106 +292,168 @@ def get_contacts_dict(url_list, from_file=False):
                 except Exception as _ex:
                     pm.error(f"Error while executing '{url}': {_ex}")
                     contacts_dict.update({gm.url_to_base_url(url): None})
-                    pm.error(f"Couldn't get a contacts url for: {url}")
                     time.sleep(10)
 
     fgm.json_rewrite(f"{DB_DATA_DIR}contacts_dict.json", contacts_dict)
     return contacts_dict
 
 
-def find_contacts_data(contacts_url):
+def find_contacts_data(contacts_url, splash):
     url = [*contacts_url.values()][0]
     base_url = [*contacts_url.keys()][0]
     pm.info(f"Find contacts data for: {url}")
     response_text = splash.get_response_text(url)
-    page_soup = BeautifulSoup(response_text, "lxml")
+    page_soup = BeautifulSoup(str(response_text).lower(), "lxml")
     fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/', '_').replace(':', '')}_contacts.html", str(page_soup))
 
-    css_selector_list = [
-        'div[class*="contact"]',
+    xpath_list = [
+        '//*[contains(text(), "address")]/ancestor::div[1]',
+        '//*[contains(text(), "address")]/ancestor::ul[1]',
+
+        "//*[text()='phone']/ancestor::div[1]",
+        "//*[text()='phone']/ancestor::ul[1]",
+
+        '//*[contains(text(), "email")]/ancestor::div[1]',
+        '//*[contains(text(), "email")]/ancestor::ul[1]',
+        '//*[contains(text(), "e-mail")]/ancestor::div[1]',
+        '//*[contains(text(), "e-mail")]/ancestor::ul[1]',
+        '//*[contains(text(), "E-mail")]/ancestor::table[1]'
+        '//*[contains(text(), "@")]/ancestor::div[1]',
+        '//*[contains(text(), "@")]/ancestor::ul[1]',
+        '//*[contains(text(), "email")]/ancestor::div[contains(@class, "footer")][1]',
+        '//*[contains(@href, "mailto")]/ancestor::div[1]',
+
+        '//*[contains(text(), "contact")]/ancestor::div[contains(@class, "footer")][1]',
+        '//*[contains(text(), "contact")]/ancestor::div[1]',
         'div[class*="contact"]',
     ]
 
-    contacts_tag = None
-    for x in page_soup.select("a"):
-        for key_word in key_word_list:
-            if key_word.lower() in x.text.lower():
-                contacts_tag = x
-                break
+    contacts_data = []
+    for xpath in xpath_list:
+        try:
+            tags = wgm.find_xpath(page_soup, xpath)
+            if len(tags) > 0:
+                contacts_data.extend([str(x) for x in tags])
+        except:
+            continue
 
-        if contacts_tag is not None:
-            break
-
-    if contacts_tag is not None:
-        pm.debug(f"contacts_tag: {contacts_tag}")
-        return {base_url: gm.repair_url(contacts_tag['href'], base_url)}
-    else:
-        pm.warning(f"contacts_tag is None: {base_url}")
-        return {base_url: None}
+    return {
+        "base_url": base_url,
+        "contacts_url": url,
+        "contacts_data": contacts_data,
+    }
 
 
-def get_contacts_data(contacts_dict):
+def get_contacts_data(contacts_dict, from_file=False):
+    # If from_file == True
+    if from_file:
+        try:
+            last_file_path = f"{DB_DATA_DIR}contacts_data.json"
+            return fgm.json_read(last_file_path)
+
+        # If file doesn't exist
+        except Exception as _ex:
+            pm.error(f"Couldn't read from a file")
+            return get_contacts_data(contacts_dict)
+
     # Create list [{base_url: url}, {} ...]
     contacts_url_list = [{
         base_url: url
+    }
         for base_url, url in zip(contacts_dict.keys(), contacts_dict.values())
         if url is not None
-    }]
+    ]
 
     # Result json [{"base_url": url, "contacts_url": url, "contacts_data": data_str}, {} ...]
     contacts_data_json = []
     contacts_url_iterator = gm.UrlIterator(contacts_url_list, MAX_WORKERS)
-    for contacts_url_list in contacts_url_iterator:
+    for contacts_url_part_list in contacts_url_iterator:
 
-        # Concurrent retries == 2
-        for _concurrent_try_counter in range(2):
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                futures = {
-                    executor.submit(find_contacts_data, contacts_url): contacts_url
-                    for contacts_url in contacts_url_list
-                }
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(find_contacts_data, contacts_url, splash): contacts_url
+                for contacts_url, splash in zip(contacts_url_part_list, splash_list)
+            }
 
-                # Process the results
-                for future in as_completed(futures):
-                    contacts_url = futures[future]
+            # Process the results
+            for future in as_completed(futures):
+                contacts_url = futures[future]
 
-                    # Try to get data concurrently
-                    try:
-                        res = future.result()
-                        if res is not None:
-                            contacts_data_json.append(res)
+                # Try to get data concurrently
+                try:
+                    res = future.result()
+                    if res is not None:
+                        contacts_data_json.append(res)
 
-                    # If there is any issue, try to get data sequentially
-                    except Exception as _ex:
-                        pm.error(f"Error while executing '{contacts_url}': {_ex}")
-                        time.sleep(20)
-                        executor.shutdown()
+                except Exception as _ex:
+                    pm.error(f"Error while executing '{contacts_url}': {_ex}")
 
-                        for contacts_url in contacts_url_list:
+                    failed_result = {
+                        "base_url": [*contacts_url.keys()][0],
+                        "contacts_url": [*contacts_url.values()][0],
+                        "contacts_data": None
+                    }
+                    contacts_data_json.append(failed_result)
+                    pm.error(f"Couldn't get a contacts url for: {contacts_url}")
+                    time.sleep(20)
 
-                            # Sequentially retries == 3
-                            for _sequentially_try_counter in range(3):
-                                try:
-                                    contacts_data_json.append(find_contacts_data(contacts_url))
-                                    break
-                                except Exception as _ex:
-                                    # Sleep and retry
-                                    pm.warning(f"Something went wrong: '{contacts_url}': {_ex}")
-                                    time.sleep(20)
+    fgm.json_rewrite(f"{DB_DATA_DIR}contacts_data.json", contacts_data_json)
+    return contacts_data_json
 
-                                # If all the reties are failed, add None as result to the result dict
-                                failed_result = {
-                                    "base_url": [*contacts_url.keys()][0],
-                                    "contacts_url": [*contacts_url.values()][0],
-                                    "contacts_data": None
-                                }
-                                contacts_data_json.append({contacts_url})
-                                pm.error(f"Couldn't get a contacts url for: {contacts_url}")
-                        break
-            break
 
-    fgm.json_rewrite(f"{DB_DATA_DIR}contacts_data.json", contacts_dict)
-    return contacts_dict
+def parse_contacts_data(contacts_data):
+    if contacts_data['contacts_data'] is not None:
+        soup_list = [BeautifulSoup(str(x).replace("\\n", " ").replace("b'", '').replace("\\t", " "), 'lxml')
+                     for x in contacts_data['contacts_data']]
+        contacts_data_list = tuple(gm.clean_str(x.text.strip()) for x in soup_list)
+
+        return {
+            "base_url": contacts_data['base_url'],
+            "contacts_url": contacts_data['contacts_url'],
+            "contacts_data": contacts_data_list,
+        }
+
+    else:
+        return None
+
+
+def get_parsed_contacts_data(contacts_data_list):
+    # TODO ThreadPoolExecutor module
+    # Result json [{"base_url": url, "contacts_url": url, "contacts_data": data_str}, {} ...]
+    parsed_contacts_data_json = []
+    contacts_data_iterator = gm.UrlIterator(contacts_data_list, MAX_WORKERS)
+    for contacts_data_part_list in contacts_data_iterator:
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(parse_contacts_data, contacts_data): contacts_data
+                for contacts_data in contacts_data_part_list
+            }
+
+            # Process the results
+            for future in as_completed(futures):
+                contacts_data = futures[future]
+
+                # Try to get data concurrently
+                try:
+                    res = future.result()
+                    if res is not None:
+                        parsed_contacts_data_json.append(res)
+
+                except Exception as _ex:
+                    pm.error(f"Error while executing '{contacts_data['base_url']}': {_ex}")
+
+                    failed_result = {
+                        "base_url": contacts_data['base_url'],
+                        "contacts_url": contacts_data['contacts_url'],
+                        "contacts_data": None
+                    }
+                    parsed_contacts_data_json.append(failed_result)
+                    pm.error(f"Couldn't parse contacts data for: {contacts_data['base_url']}")
+                    raise _ex
+
+    fgm.json_rewrite(f"{DB_DATA_DIR}parsed_contacts_data.json", parsed_contacts_data_json)
+    return parsed_contacts_data_json
 
 
 # # ===== Start app =================================================================================== Start app =====
@@ -408,11 +470,14 @@ def start_app():
 
     # Get list of Contacts/About Us urls
     # TODO: first, check if there is "/contact" or "/about_us" etc
-    contacts_dict = get_contacts_dict(url_list, from_file=False)
+    contacts_dict = get_contacts_dict(url_list, from_file=True)
 
-    sys.exit()
     # Get contacts data to future sorting
-    contacts_data_list = get_contacts_data(contacts_dict)
+    # TODO: data mixed??
+    contacts_data_list = get_contacts_data(contacts_dict, from_file=True)
+
+    # Data mining
+    parsed_contacts_data_json = get_parsed_contacts_data(contacts_data_list)
 
 
 def anchor():

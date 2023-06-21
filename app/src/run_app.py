@@ -145,7 +145,7 @@ def start_app():
 
     try:
         while True:
-            time.sleep(120)
+            time.sleep(240)
             check_splash_containers(splash_containers_data)
     except KeyboardInterrupt:
         pm.info("\nEXIT ...")
