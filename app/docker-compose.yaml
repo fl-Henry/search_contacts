@@ -3,10 +3,38 @@ version: '3.1'
 services:
   splash_0:
     image: scrapinghub/splash
-    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode -p 8060
     restart: always
     ports:
-      - 8050:8050
+      - 8060:8060
+  
+  splash_1:
+    image: scrapinghub/splash
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode -p 8061
+    restart: always
+    ports:
+      - 8061:8061
+  
+  splash_2:
+    image: scrapinghub/splash
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode -p 8062
+    restart: always
+    ports:
+      - 8062:8062
+  
+  splash_3:
+    image: scrapinghub/splash
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode -p 8063
+    restart: always
+    ports:
+      - 8063:8063
+  
+  splash_4:
+    image: scrapinghub/splash
+    command: --maxrss 4096 --max-timeout 300 --disable-ui -v 1 --disable-private-mode -p 8064
+    restart: always
+    ports:
+      - 8064:8064
   searx:
     image: searxng/searxng
     restart: always

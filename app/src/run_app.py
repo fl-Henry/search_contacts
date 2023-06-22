@@ -99,7 +99,7 @@ def get_splash_containers_data(instances_num):
         os.system(f"docker inspect app-splash_{splash_index}-1 > {file_path}")
         splash_ip = parse_docker_inspect(file_path)
         splash_containers_data.append({
-            "ip": splash_ip,
+            "ip": f"{splash_ip}:806{splash_index}",
             "name": f"app-splash_{splash_index}-1",
             "service_name": f"splash_{splash_index}",
             "index": splash_index,
@@ -112,15 +112,16 @@ def get_splash_containers_data(instances_num):
 
 def check_splash_containers(splash_containers_data):
     for splash_data in splash_containers_data:
-        ip_port = f"{splash_data['ip']}:8050"
+        ip_port = f"{splash_data['ip']}"
         pm.debug(f"ping splash_{splash_data['index']}: {ip_port}")
         splash = SplashHdr(f"http://{ip_port}/render.html", SPLASH_PARAMS)
         try:
-            response = splash.get_response_text("https://bits.debian.org/", splash_api_timeout=config["SPLASH_API_TIMEOUT"])
+            response = splash.get_response_text("https://localhost/", splash_api_timeout=int(config["SPLASH_API_TIMEOUT"]))
+            # response = splash.get_response_text("https://google.com/", splash_api_timeout=int(config["SPLASH_API_TIMEOUT"]))
             fgm.text_rewrite(f"{dh.temp}{splash_data['name']}.html", response)
-            pm.debug(f"ping success splash_{splash_data['index']}: {splash_data['ip']}:8050")
+            pm.debug(f"ping success splash_{splash_data['index']}: {splash_data['ip']}")
         except Exception as _ex:
-            pm.error(f"ping failed splash_{splash_data['index']}: {splash_data['ip']}:8050 >", _ex)
+            pm.error(f"ping failed splash_{splash_data['index']}: {splash_data['ip']} >", _ex)
 
             # Restart container
             pm.debug(dh.docker_compose_file)
@@ -145,8 +146,8 @@ def start_app():
 
     try:
         while True:
-            time.sleep(240)
             check_splash_containers(splash_containers_data)
+            time.sleep(120)
     except KeyboardInterrupt:
         pm.info("\nEXIT ...")
 

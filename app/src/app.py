@@ -4,6 +4,7 @@ import os
 import sys
 import time
 
+from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -68,7 +69,7 @@ SPLASH_PARAMS = {
 }
 SPLASH_INSTANCES = fgm.json_read(f"{dh.temp}splash_containers_data.json")
 splash_list = [
-    SplashHdr(f"http://{splash_instance['ip']}:8050/render.html", SPLASH_PARAMS)
+    SplashHdr(f"http://{splash_instance['ip']}/render.html", SPLASH_PARAMS)
     for splash_instance in SPLASH_INSTANCES
 ]
 
@@ -91,7 +92,7 @@ def select_one_of_list(soup, css_selector_list):
             continue
 
 
-def drop_blacklist_domains(url_list):
+def clear_url_list(url_list):
     # NOT inurl:(alibaba OR aliexpress OR amazon OR ebay)
     blocklist_domains = [
         "https://www.esources.co.uk",
@@ -112,11 +113,39 @@ def drop_blacklist_domains(url_list):
         "https://yelp.com",
         "https://www.ankorstore.com",
         "https://ankorstore.com",
+        "https://www.carousell.ph",
+        "https://www.kodak.com",
+        "https://www.ikea",
 
+        "info",
+        "search",
+        "auto",
+        "news",
+        "library",
+        "blog",
+        "document",
+        "docs/",
+        "/docs",
+        "/view",
+        "view/",
+        "statistics",
+        "providers",
+        "google",
+        "suppliers",
+        "india",
+        "manufacturers",
+        "distributors",
+
+        "yellow.place",
+        ".edu",
+        ".wiki",
+        "pinterest.com",
         "ebay.com",
         "ebay.co",
+        "ebay.",
         "alibaba.com",
         "aliexpress.com",
+        "instagram.com",
         "amazon.com",
         "amazon.co",
         ".apple.com",
@@ -134,17 +163,26 @@ def drop_blacklist_domains(url_list):
         "/etsy.com",
         "/wikipedia.org",
         ".wikipedia.org",
+        "merkandi.",
     ]
     result_url_list = []
     for url in url_list:
-        base_url = gm.url_to_base_url(url)
-        check_list = [x for x in blocklist_domains if x in base_url]
-        if len(check_list) > 0:
-            continue
-        else:
-            result_url_list.append(url)
+        if url[-4:] not in [".doc", '.pdf']:
+            # base_url = gm.url_to_base_url(url)
+            check_list = [x for x in blocklist_domains if x.lower() in url]
+            if len(check_list) > 0:
+                continue
+            else:
+                result_url_list.append(url)
 
-    return result_url_list
+    base_url_list = []
+    clean_url_list = []
+    for url in result_url_list:
+        if gm.url_to_base_url(url) not in base_url_list:
+            base_url_list.append(gm.url_to_base_url(url))
+            clean_url_list.append(url)
+
+    return clean_url_list
 
 
 def get_search_url_list(from_file=False):
@@ -152,7 +190,7 @@ def get_search_url_list(from_file=False):
     if from_file:
         result_files = dh.get_file_names(DB_DATA_DIR)
         try:
-            last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'clean_url_list.json' in x])}"
+            last_file_path = f"{DB_DATA_DIR}{max([x for x in result_files if 'clean_inst_url_list.json' in x])}"
             url_list = fgm.json_read(last_file_path)
 
         # If file doesn't exist
@@ -200,19 +238,27 @@ def get_search_url_list(from_file=False):
         results_json = []
 
         for country in countries:
-            response_data = searx.search_many_pages(
-                f'"{country}" phone parts company intitle:"wholesale" -dnb.com',
-                end_page=3,
-                search_settings="!go"
-            )
+            # response_data = searx.search_many_pages(
+            #     f'intitle:{country} intitle:"wholesale" intext:"mobile phone spare parts suppliers" OR intext:"mobile phone spare parts distributors" OR intext:"mobile phone spare parts wholesalers" OR intext:"mobile phone spare parts manufacturers" -china',
+            #     end_page=3,
+            #     search_settings="!go"
+            # )
+            time.sleep(2)
+            try:
+                with DDGS() as ddgs:
+                    search_query = f'{country} mobile iphone spare parts wholesale'
+                    pm.debug(search_query)
+                    for r in ddgs.text(search_query, safesearch='Off'):
+                        url_list.append(r['href'])
 
-            results_json.append(response_data.json())
-            url_list.extend(response_data.get_urls())
-            clean_url_list.extend(drop_blacklist_domains(response_data.get_urls()))
+            except:
+                pm.error("Couldn't get results for:", search_query)
+            # results_json.append(response_data.json())
 
-        fgm.json_rewrite(f"{DB_DATA_DIR}results_json.json", results_json)
+            # url_list.extend(response_data.get_urls())
+
+        # fgm.json_rewrite(f"{DB_DATA_DIR}results_json.json", results_json)
         fgm.json_rewrite(f"{DB_DATA_DIR}url_list.json", url_list)
-        fgm.json_rewrite(f"{DB_DATA_DIR}clean_url_list.json", clean_url_list)
 
     return url_list
 
@@ -221,19 +267,19 @@ def find_contacts_page(url, splash: SplashHdr):
     base_url = gm.url_to_base_url(url)
     pm.info(f"Find contacts for: {url}")
     response_text = splash.get_response_text(url)
-    page_soup = BeautifulSoup(response_text, "lxml")
+    page_soup = BeautifulSoup(str(response_text).lower(), "lxml")
     # fgm.text_rewrite(f"{DB_DATA_DIR}{base_url.replace('/','_').replace(':', '')}_main_page.html", str(page_soup))
 
     key_word_list = [
-        "Contact Us",
-        "Connect with us",
-        "Contact with",
-        "Contact",
-        "Get In Touch With Us",
-        "Get In Touch With",
-        "Get In Touch",
-        "About Us",
-        "About",
+        "contact us",
+        "connect with us",
+        "contact with",
+        "contact",
+        "get in touch with ws",
+        "get in touch with",
+        "get in touch",
+        "about us",
+        "about",
     ]
 
     contacts_tag = None
@@ -467,14 +513,16 @@ def start_app():
 
     # TODO: update key // update url_list
     url_list = get_search_url_list(from_file=True)
+    url_list = clear_url_list(url_list)
+    fgm.json_rewrite(f"{DB_DATA_DIR}clean_inst_url_list.json", url_list)
 
     # Get list of Contacts/About Us urls
     # TODO: first, check if there is "/contact" or "/about_us" etc
-    contacts_dict = get_contacts_dict(url_list, from_file=True)
+    contacts_dict = get_contacts_dict(url_list, from_file=False)
 
     # Get contacts data to future sorting
     # TODO: data mixed??
-    contacts_data_list = get_contacts_data(contacts_dict, from_file=True)
+    contacts_data_list = get_contacts_data(contacts_dict, from_file=False)
 
     # Data mining
     parsed_contacts_data_json = get_parsed_contacts_data(contacts_data_list)
