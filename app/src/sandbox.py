@@ -1,6 +1,3 @@
-from duckduckgo_search import DDGS
+import files_general_methods as fgm
 
-with DDGS() as ddgs:
-    search_query = "France wholesale phone spare parts"
-    for r in ddgs.text(search_query, safesearch='Off'):
-        print(r['href'])
+
